@@ -1,0 +1,5 @@
+{
+  "name": "TradeFlow Bot Manager",
+  "description": "A comprehensive simulator and management dashboard for a private performance-based trading trial Telegram bot, featuring admin controls, user profiles, and AI-driven performance analytics.",
+  "requestFramePermissions": []
+}
