@@ -8,7 +8,7 @@ import BotSimulator from './components/BotSimulator';
 import { Shield, ChevronRight, Menu, X, LogOut, AlertTriangle } from 'lucide-react';
 
 const App: React.FC = () => {
-  const { state, startTrial, addTradeResult, editTradeResult, deleteTradeResult, resetAll } = useBotStore();
+  const { state, startTrial, reactivateUser, addTradeResult, editTradeResult, deleteTradeResult, resetAll } = useBotStore();
   const [activeTab, setActiveTab] = useState('dashboard');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
@@ -25,6 +25,7 @@ const App: React.FC = () => {
             onEdit={editTradeResult} 
             onDelete={deleteTradeResult} 
             onReset={resetAll}
+            onRejoin={reactivateUser}
             recentTrades={state.trades}
           />
         );
@@ -46,11 +47,21 @@ const App: React.FC = () => {
                             <p className="font-mono text-blue-400 text-sm">{u.id}</p>
                             <p className="text-xs text-slate-500 mt-1">Joined: {new Date(u.joinTimestamp).toLocaleString()}</p>
                         </div>
-                        <div className="text-right">
-                             <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase mb-2 block w-fit ml-auto ${u.status === 'active' ? 'bg-emerald-500/20 text-emerald-500' : 'bg-slate-500/20 text-slate-500'}`}>
-                                {u.status}
-                             </span>
-                             <p className="text-sm font-bold text-slate-200">{u.points} Points / {u.tradesCount} Trades</p>
+                        <div className="text-right flex items-center gap-4">
+                             <div>
+                                <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase mb-2 block w-fit ml-auto ${u.status === 'active' ? 'bg-emerald-500/20 text-emerald-500' : 'bg-slate-500/20 text-slate-500'}`}>
+                                    {u.status}
+                                </span>
+                                <p className="text-sm font-bold text-slate-200">{u.points} Points / {u.tradesCount} Trades</p>
+                             </div>
+                             {u.status === 'exited' && (
+                               <button 
+                                onClick={() => reactivateUser(u.id)}
+                                className="bg-emerald-600 hover:bg-emerald-700 text-white p-2 rounded-lg text-xs font-bold"
+                               >
+                                 Reactivate
+                               </button>
+                             )}
                         </div>
                     </div>
                 ))}
@@ -88,7 +99,7 @@ const App: React.FC = () => {
             </div>
             <div>
               <h1 className="font-bold text-lg leading-tight text-white">TradeFlow</h1>
-              <p className="text-[10px] text-blue-400 font-bold uppercase tracking-widest">Bot Manager</p>
+              <p className="text-[10px] text-blue-400 font-bold uppercase tracking-widest">Admin Control</p>
             </div>
           </div>
 
@@ -117,15 +128,6 @@ const App: React.FC = () => {
           </nav>
 
           <div className="p-4 border-t border-slate-800 space-y-4">
-            <div className="bg-amber-500/10 border border-amber-500/20 p-3 rounded-lg">
-                <div className="flex items-center gap-2 text-amber-500 mb-1">
-                    <AlertTriangle size={14} />
-                    <span className="text-[10px] font-bold uppercase">Persistence Alert</span>
-                </div>
-                <p className="text-[10px] leading-tight text-slate-400">
-                    Render Free instances lose files on restart. For permanent data, use MongoDB Atlas.
-                </p>
-            </div>
             <div className="bg-slate-800/50 p-3 rounded-lg">
               <p className="text-[10px] text-slate-500 uppercase font-bold tracking-tight mb-1">Disclaimer</p>
               <p className="text-[10px] leading-relaxed text-slate-600 italic">{DISCLAIMER}</p>
@@ -151,13 +153,8 @@ const App: React.FC = () => {
           <div className="flex items-center gap-4">
             <div className="hidden sm:flex items-center gap-2 bg-slate-800 px-3 py-1.5 rounded-full border border-slate-700">
                <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse" />
-               <span className="text-xs text-slate-300 font-medium">System Online</span>
+               <span className="text-xs text-slate-300 font-medium">Admin Master Active</span>
             </div>
-            <div className="h-8 w-[1px] bg-slate-800" />
-            <button className="flex items-center gap-2 text-sm text-slate-400 hover:text-rose-500 transition-colors">
-              <LogOut size={18} />
-              <span className="hidden sm:inline">Logout</span>
-            </button>
           </div>
         </header>
 

@@ -43,6 +43,13 @@ export const useBotStore = () => {
     });
   }, []);
 
+  const reactivateUser = useCallback((userId: string) => {
+    setState(prev => ({
+      ...prev,
+      users: prev.users.map(u => u.id === userId ? { ...u, status: UserStatus.ACTIVE } : u)
+    }));
+  }, []);
+
   const addTradeResult = useCallback((tradeId: string, pair: string, result: string) => {
     const points = calculatePoints(result);
     const newTrade: TradeResult = {
@@ -60,8 +67,6 @@ export const useBotStore = () => {
         if (newTrade.timestamp >= user.joinTimestamp) {
           const newTradesCount = user.tradesCount + 1;
           const newPoints = user.points + points;
-          
-          // Completion logic: AND condition
           const shouldExit = newTradesCount >= 10 && newPoints >= 10;
           const newStatus = shouldExit ? UserStatus.EXITED : UserStatus.ACTIVE;
           
@@ -149,6 +154,7 @@ export const useBotStore = () => {
   return {
     state,
     startTrial,
+    reactivateUser,
     addTradeResult,
     editTradeResult,
     deleteTradeResult,
