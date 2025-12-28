@@ -1,7 +1,7 @@
 
 import React from 'react';
 import { User, TradeResult, UserStatus } from '../types';
-import { Users, Target, Zap, Clock, ShieldCheck, XCircle } from 'lucide-react';
+import { Users, Target, Zap, Clock, ShieldCheck, XCircle, MessageCircle } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 
 interface DashboardOverviewProps {
@@ -22,13 +22,13 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({ users, trades }) 
   ];
 
   const StatCard = ({ icon, label, value, subtext, colorClass }: any) => (
-    <div className="bg-slate-800 rounded-xl p-5 border border-slate-700 flex items-start gap-4">
+    <div className="bg-slate-800 rounded-xl p-5 border border-slate-700 flex items-start gap-4 shadow-lg shadow-slate-900/20">
       <div className={`p-3 rounded-lg ${colorClass}`}>
         {icon}
       </div>
       <div>
         <p className="text-sm font-medium text-slate-400">{label}</p>
-        <h3 className="text-2xl font-bold mt-1">{value}</h3>
+        <h3 className="text-2xl font-bold mt-1 text-white">{value}</h3>
         <p className="text-xs text-slate-500 mt-1">{subtext}</p>
       </div>
     </div>
@@ -39,51 +39,51 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({ users, trades }) 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard 
           icon={<Users size={24} />} 
-          label="Total Users" 
+          label="Total Leads" 
           value={users.length} 
-          subtext={`${activeUsers.length} Currently Active`}
+          subtext={`${activeUsers.length} Users Active`}
           colorClass="bg-blue-500/10 text-blue-500"
         />
         <StatCard 
           icon={<Zap size={24} />} 
-          label="Total Trades Posted" 
+          label="Signals Sent" 
           value={trades.length} 
-          subtext="Across all trials"
+          subtext="Total results posted"
           colorClass="bg-amber-500/10 text-amber-500"
         />
         <StatCard 
           icon={<Target size={24} />} 
-          label="Avg User Pts" 
+          label="Avg Score" 
           value={avgPoints} 
-          subtext="Target is 10+"
+          subtext="Trial avg points"
           colorClass="bg-emerald-500/10 text-emerald-500"
         />
         <StatCard 
           icon={<ShieldCheck size={24} />} 
-          label="Completion Rate" 
-          value={`${users.length ? Math.round((exitedUsers.length / users.length) * 100) : 0}%`} 
-          subtext={`${exitedUsers.length} Users Finished`}
+          label="Finishers" 
+          value={exitedUsers.length} 
+          subtext="Completed trial"
           colorClass="bg-purple-500/10 text-purple-500"
         />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="bg-slate-800 rounded-xl p-6 border border-slate-700 lg:col-span-1">
-          <h3 className="font-bold mb-4 flex items-center gap-2">
+        <div className="bg-slate-800 rounded-xl p-6 border border-slate-700 lg:col-span-1 shadow-xl">
+          <h3 className="font-bold mb-6 flex items-center gap-2 text-white">
             <Zap size={18} className="text-amber-400" />
-            User Status Distribution
+            Active vs Exited
           </h3>
           <div className="h-64">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={data}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#334155" vertical={false} />
-                <XAxis dataKey="name" stroke="#94a3b8" />
-                <YAxis stroke="#94a3b8" />
+                <XAxis dataKey="name" stroke="#94a3b8" fontSize={12} />
+                <YAxis stroke="#94a3b8" fontSize={12} />
                 <Tooltip 
-                  contentStyle={{ backgroundColor: '#1e293b', border: '1px solid #475569', borderRadius: '8px' }}
-                  cursor={{ fill: 'transparent' }}
+                  contentStyle={{ backgroundColor: '#0f172a', border: '1px solid #334155', borderRadius: '8px', color: '#fff' }}
+                  cursor={{ fill: '#ffffff08' }}
                 />
-                <Bar dataKey="value" radius={[4, 4, 0, 0]}>
+                <Bar dataKey="value" radius={[6, 6, 0, 0]} barSize={40}>
                   {data.map((entry, index) => (
                     <Cell key={`cell-${index}`} fill={entry.color} />
                   ))}
@@ -93,57 +93,48 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({ users, trades }) 
           </div>
         </div>
 
-        <div className="bg-slate-800 rounded-xl p-6 border border-slate-700 lg:col-span-2 overflow-hidden">
-          <h3 className="font-bold mb-4 flex items-center gap-2">
+        <div className="bg-slate-800 rounded-xl p-6 border border-slate-700 lg:col-span-2 overflow-hidden shadow-xl">
+          <h3 className="font-bold mb-6 flex items-center gap-2 text-white">
             <Clock size={18} className="text-blue-400" />
-            Latest Trial Activity
+            Recent Activity Log
           </h3>
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm">
+            <table className="w-full text-left text-sm border-separate border-spacing-y-1">
               <thead>
-                <tr className="text-slate-500 border-b border-slate-700">
-                  <th className="pb-3 font-medium">User ID</th>
-                  <th className="pb-3 font-medium">Status</th>
-                  <th className="pb-3 font-medium">Progress</th>
-                  <th className="pb-3 font-medium">Joined</th>
+                <tr className="text-slate-500">
+                  <th className="pb-3 px-2 font-bold uppercase text-[10px] tracking-wider">User ID</th>
+                  <th className="pb-3 px-2 font-bold uppercase text-[10px] tracking-wider">Status</th>
+                  <th className="pb-3 px-2 font-bold uppercase text-[10px] tracking-wider">Points</th>
+                  <th className="pb-3 px-2 font-bold uppercase text-[10px] tracking-wider text-right">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-700">
-                {users.slice().reverse().slice(0, 5).map(user => (
-                  <tr key={user.id} className="hover:bg-slate-700/30 transition-colors">
-                    <td className="py-4 font-mono text-blue-400">{user.id}</td>
-                    <td className="py-4">
+              <tbody>
+                {users.slice().reverse().slice(0, 10).map(user => (
+                  <tr key={user.id} className="bg-slate-900/40 hover:bg-slate-900/60 transition-colors group">
+                    <td className="py-4 px-2 rounded-l-lg font-mono text-blue-400 text-xs">{user.id}</td>
+                    <td className="py-4 px-2">
                       <div className="flex items-center gap-1.5">
-                        {user.status === UserStatus.ACTIVE ? (
-                          <ShieldCheck size={14} className="text-emerald-500" />
-                        ) : (
-                          <XCircle size={14} className="text-slate-500" />
-                        )}
-                        <span className={user.status === UserStatus.ACTIVE ? 'text-emerald-500' : 'text-slate-500'}>
+                        <div className={`w-2 h-2 rounded-full ${user.status === UserStatus.ACTIVE ? 'bg-emerald-500 animate-pulse' : 'bg-rose-500'}`} />
+                        <span className={`text-xs font-bold uppercase ${user.status === UserStatus.ACTIVE ? 'text-emerald-500' : 'text-rose-500'}`}>
                           {user.status}
                         </span>
                       </div>
                     </td>
-                    <td className="py-4">
-                      <div className="flex items-center gap-3">
-                        <div className="flex-1 h-2 bg-slate-900 rounded-full max-w-[100px]">
-                          <div 
-                            className="h-full bg-blue-500 rounded-full" 
-                            style={{ width: `${Math.min((user.tradesCount / 10) * 100, 100)}%` }}
-                          />
-                        </div>
-                        <span className="text-xs text-slate-400">{user.tradesCount}/10</span>
-                      </div>
+                    <td className="py-4 px-2">
+                       <span className="text-sm font-bold text-slate-200">{user.points} Pts</span>
+                       <span className="text-[10px] text-slate-500 ml-2">({user.tradesCount}/10 T)</span>
                     </td>
-                    <td className="py-4 text-slate-500 text-xs">
-                      {new Date(user.joinTimestamp).toLocaleDateString()}
+                    <td className="py-4 px-2 rounded-r-lg text-right">
+                       <button className="p-2 text-slate-500 hover:text-blue-400 transition-colors opacity-0 group-hover:opacity-100">
+                         <MessageCircle size={16} />
+                       </button>
                     </td>
                   </tr>
                 ))}
                 {users.length === 0 && (
                    <tr>
-                   <td colSpan={4} className="text-center py-10 text-slate-500 italic">No users in simulation.</td>
-                 </tr>
+                    <td colSpan={4} className="text-center py-20 text-slate-600 italic">Database is currently empty.</td>
+                   </tr>
                 )}
               </tbody>
             </table>

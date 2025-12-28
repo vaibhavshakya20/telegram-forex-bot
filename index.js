@@ -46,6 +46,33 @@ if (TOKEN) {
   const bot = new TelegramBot(TOKEN, { polling: true });
   const isAdmin = (id) => id.toString() === ADMIN_ID;
 
+  // --- ADMIN: PHOTO BROADCAST (Screenshots) ---
+  bot.on('photo', (msg) => {
+    if (!isAdmin(msg.from.id)) return;
+    
+    const db = loadDB();
+    const photoId = msg.photo[msg.photo.length - 1].file_id;
+    const caption = msg.caption || "";
+    const activeUsers = Object.values(db.users).filter(u => u.status === 'active');
+
+    activeUsers.forEach(u => {
+      bot.sendPhoto(u.user_id, photoId, { caption: caption });
+    });
+
+    bot.sendMessage(msg.chat.id, `📸 Screenshot broadcasted to ${activeUsers.length} active users.`);
+  });
+
+  // --- ADMIN: DIRECT MESSAGE TO USER ---
+  bot.onText(/\/msg (\d+) (.+)/, (msg, match) => {
+    if (!isAdmin(msg.from.id)) return;
+    const targetId = match[1];
+    const text = match[2];
+    
+    bot.sendMessage(targetId, `💬 *Message from Admin:*\n\n${text}`, { parse_mode: 'Markdown' })
+      .then(() => bot.sendMessage(msg.chat.id, `✅ Message sent to user \`${targetId}\``, { parse_mode: 'Markdown' }))
+      .catch(() => bot.sendMessage(msg.chat.id, `❌ Failed to send. User might have blocked the bot.`));
+  });
+
   // --- USER/ADMIN: START ---
   bot.onText(/\/start/, (msg) => {
     const uid = msg.from.id.toString();
@@ -53,21 +80,16 @@ if (TOKEN) {
     
     if (isAdmin(uid)) {
       return bot.sendMessage(msg.chat.id, 
-        "⚡ Welcome Admin Master!\n\n" +
-        "Workflow:\n" +
-        "1. Entry/Exit Screenshots: Channel mein manually upload karein.\n" +
-        "2. Result Update: Bot mein /add [result] use karein.\n\n" +
-        "Admin Commands:\n" +
-        "• `/add 3` (Profit 1:3 RR)\n" +
-        "• `/add sl` (Loss SL)\n" +
-        "• `/rejoin USER_ID` (Exited user ko wapas active karein)\n" +
-        "• `/profile` (System Summary & User List)\n" +
-        "• `/users` (Detailed User Table for Copy-Paste)"
+        "⚡ *Admin Panel Active*\n\n" +
+        "• *Broadcasting:* Bot ko koi bhi Chart SS bhejien, wo turant sabko mil jayega.\n" +
+        "• *Direct Msg:* `/msg ID message` bhejien.\n" +
+        "• *Result:* `/add 3` ya `/add sl` bhejien.\n" +
+        "• *Data:* `/users` se list dekhein."
       , { parse_mode: 'Markdown' });
     }
 
     if (db.users[uid]) {
-      return bot.sendMessage(msg.chat.id, "Welcome back!\nAapka trial data safe hai. /profile se check karein.");
+      return bot.sendMessage(msg.chat.id, "Welcome back! /profile se status check karein.");
     }
 
     db.users[uid] = {
@@ -80,43 +102,40 @@ if (TOKEN) {
       history: []
     };
     saveDB(db);
-    bot.sendMessage(msg.chat.id, "Welcome 👋\nAapka free trial start ho chuka hai.\n\nRules:\n• SL = -1 Point\n• Target 1:N = N Points\n\nChannel mein active rahein.");
+    bot.sendMessage(msg.chat.id, "Welcome 👋\nAapka free trial start ho chuka hai.\n\nRules:\n• SL = -1 Point\n• Target 1:N = N Points\n\nAbhi se jo bhi screenshots admin bhejenge, wo aapko yahi milenge.");
   });
 
-  // --- PROFILE (Admin Summary) ---
-  bot.onText(/\/profile/, (msg) => {
-    const uid = msg.from.id.toString();
-    const db = loadDB();
-
-    if (isAdmin(uid)) {
-      const users = Object.values(db.users);
-      const active = users.filter(u => u.status === 'active').length;
-      let list = `🛠 *ADMIN DASHBOARD*\n\nTotal Users: ${users.length}\nActive: ${active}\n\n*User Directory:*\n`;
-      users.forEach(u => {
-        list += `• \`${u.user_id}\` | ${u.status === 'active' ? '🟢' : '🔴'} | P:${u.points} | T:${u.trades}\n`;
-      });
-      return bot.sendMessage(msg.chat.id, list.slice(0, 4000), { parse_mode: 'Markdown' });
-    }
-
-    const u = db.users[uid];
-    if (!u) return bot.sendMessage(msg.chat.id, "Pehle /start bhein.");
-    const hist = u.history.map((h, i) => `${i+1}) ${h.tradeId} | ${h.points > 0 ? '+' : ''}${h.points} Pts`).join('\n') || "No trades yet.";
-    bot.sendMessage(msg.chat.id, `📊 *Your Profile*\n\nJoined: ${new Date(u.join_timestamp).toLocaleDateString()}\nTrades: ${u.trades} / 10\nPoints: ${u.points} / 10\nStatus: ${u.status.toUpperCase()}\n\n*History:*\n${hist}`, { parse_mode: 'Markdown' });
-  });
-
-  // --- USERS LIST (Copy-Paste Friendly) ---
+  // --- USERS LIST (Admin Only) ---
   bot.onText(/\/users/, (msg) => {
     if (!isAdmin(msg.from.id)) return;
     const db = loadDB();
     const users = Object.values(db.users);
-    let list = `👥 *User List (${users.length})*\n_Click ID to copy_\n\n`;
+    let list = `👥 *User List (${users.length})*\n\n`;
     users.forEach(u => {
-      list += `ID: \`${u.user_id}\` | ${u.status} | Pts: ${u.points}\n`;
+      list += `\`${u.user_id}\` | P:${u.points} | ${u.status === 'active' ? '🟢' : '🔴'}\n`;
+      list += `/msg ${u.user_id} [text]\n\n`;
     });
     bot.sendMessage(msg.chat.id, list.slice(0, 4000), { parse_mode: 'Markdown' });
   });
 
-  // --- ADMIN: ADD (Auto ID) ---
+  // --- PROFILE (Context Sensitive) ---
+  bot.onText(/\/profile/, (msg) => {
+    const uid = msg.from.id.toString();
+    const db = loadDB();
+    const u = db.users[uid];
+    
+    if (!u) return bot.sendMessage(msg.chat.id, "Pehle /start bhein.");
+    
+    if (isAdmin(uid)) {
+      const activeCount = Object.values(db.users).filter(x => x.status === 'active').length;
+      return bot.sendMessage(msg.chat.id, `📊 *System Summary*\nActive Users: ${activeCount}\nTotal Database: ${Object.keys(db.users).length}\n\nUse /users for details.`, { parse_mode: 'Markdown' });
+    }
+
+    const hist = u.history.map((h, i) => `${i+1}) ${h.tradeId} | ${h.points > 0 ? '+' : ''}${h.points} Pts`).join('\n') || "No trades yet.";
+    bot.sendMessage(msg.chat.id, `📊 *Your Stats*\n\nTrades: ${u.trades} / 10\nPoints: ${u.points} / 10\nStatus: ${u.status.toUpperCase()}\n\n*History:*\n${hist}`, { parse_mode: 'Markdown' });
+  });
+
+  // --- ADMIN: ADD RESULT ---
   bot.onText(/\/add (\S+)/, (msg, match) => {
     if (!isAdmin(msg.from.id)) return;
     const resInput = match[1];
@@ -135,41 +154,28 @@ if (TOKEN) {
         
         if (u.trades >= 10 && u.points >= 10) {
           u.status = 'exited';
-          bot.sendMessage(uid, "🚫 *Free trial completed.*\nYour access has ended permanently.", { parse_mode: 'Markdown' });
+          bot.sendMessage(uid, "🚫 *Trial Completed*\nAapka free trial khatam ho gaya hai.\nAccess permanent end ho gayi hai.");
         } else {
-          bot.sendMessage(uid, `✅ *Trade Result: ${tradeId}*\nResult: ${resInput}\nPoints: ${pts > 0 ? '+' : ''}${pts}\nTotal Points: ${u.points}`, { parse_mode: 'Markdown' });
+          bot.sendMessage(uid, `✅ *New Result: ${tradeId}*\nResult: ${resInput}\nPoints: ${pts > 0 ? '+' : ''}${pts}\nTotal Score: ${u.points}`);
         }
       }
     });
     
     saveDB(db);
-    bot.sendMessage(msg.chat.id, `✅ Success! Trade ${tradeId} added.\nResult: ${resInput} (${pts} pts).\nActive users updated.`);
+    bot.sendMessage(msg.chat.id, `✅ Trade ${tradeId} added. Broadasted to all active users.`);
   });
 
-  // --- ADMIN: REJOIN (Robust Matching) ---
-  bot.onText(/\/rejoin (\S+)/, (msg, match) => {
+  // --- ADMIN: REJOIN ---
+  bot.onText(/\/rejoin (\d+)/, (msg, match) => {
     if (!isAdmin(msg.from.id)) return;
-    const targetUid = match[1].trim();
+    const targetUid = match[1];
     const db = loadDB();
+    if (!db.users[targetUid]) return bot.sendMessage(msg.chat.id, "User not found.");
     
-    // Check if ID exists as a direct key
-    let user = db.users[targetUid];
-    
-    // Backup: Search inside objects if key check fails
-    if (!user) {
-      const foundId = Object.keys(db.users).find(k => k.toString() === targetUid);
-      if (foundId) user = db.users[foundId];
-    }
-
-    if (!user) {
-      return bot.sendMessage(msg.chat.id, `❌ Error: User ID \`${targetUid}\` nahi mili.\nCheck /users for correct IDs.`, { parse_mode: 'Markdown' });
-    }
-    
-    user.status = 'active';
+    db.users[targetUid].status = 'active';
     saveDB(db);
-    
-    bot.sendMessage(msg.chat.id, `✅ User \`${targetUid}\` has been reactivated successfully.`, { parse_mode: 'Markdown' });
-    bot.sendMessage(user.user_id, `⚡ *Trial Reactivated*\nYour access has been restored by Admin.\nWelcome back!`, { parse_mode: 'Markdown' });
+    bot.sendMessage(msg.chat.id, `User ${targetUid} reactivated.`);
+    bot.sendMessage(targetUid, `⚡ *Re-Entry Granted*\nWelcome back! Admin has restored your access.`);
   });
 
   bot.on('polling_error', (err) => console.log('Polling Error:', err.message));
