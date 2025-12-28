@@ -7,9 +7,10 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContaine
 interface DashboardOverviewProps {
   users: User[];
   trades: TradeResult[];
+  onMessageUser?: (id: string) => void;
 }
 
-const DashboardOverview: React.FC<DashboardOverviewProps> = ({ users, trades }) => {
+const DashboardOverview: React.FC<DashboardOverviewProps> = ({ users, trades, onMessageUser }) => {
   const activeUsers = users.filter(u => u.status === UserStatus.ACTIVE);
   const exitedUsers = users.filter(u => u.status === UserStatus.EXITED);
   
@@ -22,7 +23,7 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({ users, trades }) 
   ];
 
   const StatCard = ({ icon, label, value, subtext, colorClass }: any) => (
-    <div className="bg-slate-800 rounded-xl p-5 border border-slate-700 flex items-start gap-4 shadow-lg shadow-slate-900/20">
+    <div className="bg-slate-800 rounded-xl p-5 border border-slate-700 flex items-start gap-4 shadow-lg shadow-slate-900/20 hover:border-slate-600 transition-colors">
       <div className={`p-3 rounded-lg ${colorClass}`}>
         {icon}
       </div>
@@ -125,7 +126,11 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({ users, trades }) 
                        <span className="text-[10px] text-slate-500 ml-2">({user.tradesCount}/10 T)</span>
                     </td>
                     <td className="py-4 px-2 rounded-r-lg text-right">
-                       <button className="p-2 text-slate-500 hover:text-blue-400 transition-colors opacity-0 group-hover:opacity-100">
+                       <button 
+                        onClick={() => onMessageUser && onMessageUser(user.id)}
+                        className="p-2 text-slate-500 hover:text-blue-400 transition-colors opacity-0 group-hover:opacity-100"
+                        title="Send Direct Message"
+                       >
                          <MessageCircle size={16} />
                        </button>
                     </td>

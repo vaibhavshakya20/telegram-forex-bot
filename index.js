@@ -8,11 +8,23 @@ import http from 'http';
 
 dotenv.config();
 
+// --- PREVENT CRASHES: Global Error Handlers ---
+process.on('uncaughtException', (err) => {
+  console.error('CRITICAL ERROR (Uncaught Exception):', err);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('CRITICAL ERROR (Unhandled Rejection):', reason);
+});
+
+// --- KEEP ALIVE: HTTP Server ---
 const PORT = process.env.PORT || 3000;
 http.createServer((req, res) => {
   res.writeHead(200, { 'Content-Type': 'text/plain' });
-  res.end('TradeFlow Admin Pro is Live\n');
-}).listen(PORT);
+  res.end('TradeFlow Engine: Active\n');
+}).listen(PORT, () => {
+  console.log(`Keep-alive server running on port ${PORT}`);
+});
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -20,6 +32,11 @@ const __dirname = path.dirname(__filename);
 const TOKEN = process.env.BOT_TOKEN;
 const ADMIN_ID = process.env.ADMIN_ID; 
 const DB_PATH = path.join(__dirname, 'db.json');
+
+// Temporary state to track if admin is in "messaging mode"
+const adminState = {
+  activeTargetId: null
+};
 
 const loadDB = () => {
   try {
@@ -32,7 +49,11 @@ const loadDB = () => {
 };
 
 const saveDB = (data) => {
-  fs.writeFileSync(DB_PATH, JSON.stringify(data, null, 2));
+  try {
+    fs.writeFileSync(DB_PATH, JSON.stringify(data, null, 2));
+  } catch (e) {
+    console.error('DB Save Error:', e);
+  }
 };
 
 const parseResult = (input) => {
@@ -43,34 +64,67 @@ const parseResult = (input) => {
 };
 
 if (TOKEN) {
-  const bot = new TelegramBot(TOKEN, { polling: true });
-  const isAdmin = (id) => id.toString() === ADMIN_ID;
+  const bot = new TelegramBot(TOKEN, { 
+    polling: {
+      interval: 300,
+      autoStart: true,
+      params: { timeout: 10 }
+    }
+  });
 
-  // --- ADMIN: PHOTO BROADCAST (Screenshots) ---
+  const isAdmin = (id) => id && id.toString() === ADMIN_ID;
+
+  // --- ADMIN: INLINE KEYBOARD HANDLER ---
+  bot.on('callback_query', (query) => {
+    if (!isAdmin(query.from.id)) return;
+    
+    const data = query.data;
+    if (data.startsWith('msg_')) {
+      const targetId = data.split('_')[1];
+      adminState.activeTargetId = targetId;
+      bot.answerCallbackQuery(query.id);
+      bot.sendMessage(ADMIN_ID, `📝 *Messaging Mode:* Write your message for User \`${targetId}\` below.\n(Type /cancel to exit)`, { parse_mode: 'Markdown' });
+    }
+  });
+
+  // --- GLOBAL MESSAGE HANDLER ---
+  bot.on('message', (msg) => {
+    const uid = msg.from.id.toString();
+    const text = msg.text;
+
+    // Handle Admin Messaging State
+    if (isAdmin(uid) && adminState.activeTargetId && text) {
+      if (text === '/cancel') {
+        adminState.activeTargetId = null;
+        return bot.sendMessage(ADMIN_ID, "✅ Messaging mode cancelled.");
+      }
+      
+      const target = adminState.activeTargetId;
+      bot.sendMessage(target, `💬 *Message from Admin:*\n\n${text}`, { parse_mode: 'Markdown' })
+        .then(() => {
+          bot.sendMessage(ADMIN_ID, `✅ Message sent to \`${target}\`.`);
+          adminState.activeTargetId = null; // Reset after sending
+        })
+        .catch(() => {
+          bot.sendMessage(ADMIN_ID, `❌ Failed to send to \`${target}\`. User might have blocked the bot.`);
+          adminState.activeTargetId = null;
+        });
+      return;
+    }
+  });
+
+  // --- ADMIN: PHOTO BROADCAST ---
   bot.on('photo', (msg) => {
     if (!isAdmin(msg.from.id)) return;
-    
     const db = loadDB();
     const photoId = msg.photo[msg.photo.length - 1].file_id;
     const caption = msg.caption || "";
     const activeUsers = Object.values(db.users).filter(u => u.status === 'active');
-
-    activeUsers.forEach(u => {
-      bot.sendPhoto(u.user_id, photoId, { caption: caption });
-    });
-
-    bot.sendMessage(msg.chat.id, `📸 Screenshot broadcasted to ${activeUsers.length} active users.`);
-  });
-
-  // --- ADMIN: DIRECT MESSAGE TO USER ---
-  bot.onText(/\/msg (\d+) (.+)/, (msg, match) => {
-    if (!isAdmin(msg.from.id)) return;
-    const targetId = match[1];
-    const text = match[2];
     
-    bot.sendMessage(targetId, `💬 *Message from Admin:*\n\n${text}`, { parse_mode: 'Markdown' })
-      .then(() => bot.sendMessage(msg.chat.id, `✅ Message sent to user \`${targetId}\``, { parse_mode: 'Markdown' }))
-      .catch(() => bot.sendMessage(msg.chat.id, `❌ Failed to send. User might have blocked the bot.`));
+    activeUsers.forEach(u => {
+      bot.sendPhoto(u.user_id, photoId, { caption: caption }).catch(e => console.log(`Failed for ${u.user_id}`));
+    });
+    bot.sendMessage(msg.chat.id, `📸 Broadcasted to ${activeUsers.length} users.`);
   });
 
   // --- USER/ADMIN: START ---
@@ -81,58 +135,54 @@ if (TOKEN) {
     if (isAdmin(uid)) {
       return bot.sendMessage(msg.chat.id, 
         "⚡ *Admin Panel Active*\n\n" +
-        "• *Broadcasting:* Bot ko koi bhi Chart SS bhejien, wo turant sabko mil jayega.\n" +
-        "• *Direct Msg:* `/msg ID message` bhejien.\n" +
-        "• *Result:* `/add 3` ya `/add sl` bhejien.\n" +
-        "• *Data:* `/users` se list dekhein."
+        "• *Broadcasting:* Send any Photo for all users.\n" +
+        "• *Results:* Use `/add 3` or `/add sl`.\n" +
+        "• *Directory:* Use `/users` to list & message users easily."
       , { parse_mode: 'Markdown' });
     }
 
-    if (db.users[uid]) {
-      return bot.sendMessage(msg.chat.id, "Welcome back! /profile se status check karein.");
+    if (!db.users[uid]) {
+      db.users[uid] = {
+        user_id: uid,
+        username: msg.from.username || 'Trader',
+        join_timestamp: Date.now(),
+        trades: 0,
+        points: 0,
+        status: "active",
+        history: []
+      };
+      saveDB(db);
+      bot.sendMessage(msg.chat.id, "Welcome 👋 Aapka free trial start ho chuka hai.");
+    } else {
+      bot.sendMessage(msg.chat.id, "Welcome back! Use /profile.");
     }
-
-    db.users[uid] = {
-      user_id: uid,
-      username: msg.from.username || 'Trader',
-      join_timestamp: Date.now(),
-      trades: 0,
-      points: 0,
-      status: "active",
-      history: []
-    };
-    saveDB(db);
-    bot.sendMessage(msg.chat.id, "Welcome 👋\nAapka free trial start ho chuka hai.\n\nRules:\n• SL = -1 Point\n• Target 1:N = N Points\n\nAbhi se jo bhi screenshots admin bhejenge, wo aapko yahi milenge.");
   });
 
-  // --- USERS LIST (Admin Only) ---
+  // --- USERS LIST with EASY BUTTONS ---
   bot.onText(/\/users/, (msg) => {
     if (!isAdmin(msg.from.id)) return;
     const db = loadDB();
     const users = Object.values(db.users);
-    let list = `👥 *User List (${users.length})*\n\n`;
+    
+    if (users.length === 0) return bot.sendMessage(ADMIN_ID, "No users yet.");
+
+    bot.sendMessage(ADMIN_ID, `👥 *User Directory (${users.length} users)*\nSelect a user to message:`, { parse_mode: 'Markdown' });
+
     users.forEach(u => {
-      list += `\`${u.user_id}\` | P:${u.points} | ${u.status === 'active' ? '🟢' : '🔴'}\n`;
-      list += `/msg ${u.user_id} [text]\n\n`;
+      const statusIcon = u.status === 'active' ? '🟢' : '🔴';
+      bot.sendMessage(ADMIN_ID, 
+        `${statusIcon} *User:* \`${u.user_id}\`\nPoints: ${u.points} | Trades: ${u.trades}`,
+        { 
+          parse_mode: 'Markdown',
+          reply_markup: {
+            inline_keyboard: [
+              [{ text: "✉️ Send Message", callback_data: `msg_${u.user_id}` }],
+              [{ text: "🔄 Reactivate User", callback_data: `rejoin_${u.user_id}` }]
+            ]
+          }
+        }
+      );
     });
-    bot.sendMessage(msg.chat.id, list.slice(0, 4000), { parse_mode: 'Markdown' });
-  });
-
-  // --- PROFILE (Context Sensitive) ---
-  bot.onText(/\/profile/, (msg) => {
-    const uid = msg.from.id.toString();
-    const db = loadDB();
-    const u = db.users[uid];
-    
-    if (!u) return bot.sendMessage(msg.chat.id, "Pehle /start bhein.");
-    
-    if (isAdmin(uid)) {
-      const activeCount = Object.values(db.users).filter(x => x.status === 'active').length;
-      return bot.sendMessage(msg.chat.id, `📊 *System Summary*\nActive Users: ${activeCount}\nTotal Database: ${Object.keys(db.users).length}\n\nUse /users for details.`, { parse_mode: 'Markdown' });
-    }
-
-    const hist = u.history.map((h, i) => `${i+1}) ${h.tradeId} | ${h.points > 0 ? '+' : ''}${h.points} Pts`).join('\n') || "No trades yet.";
-    bot.sendMessage(msg.chat.id, `📊 *Your Stats*\n\nTrades: ${u.trades} / 10\nPoints: ${u.points} / 10\nStatus: ${u.status.toUpperCase()}\n\n*History:*\n${hist}`, { parse_mode: 'Markdown' });
   });
 
   // --- ADMIN: ADD RESULT ---
@@ -154,29 +204,20 @@ if (TOKEN) {
         
         if (u.trades >= 10 && u.points >= 10) {
           u.status = 'exited';
-          bot.sendMessage(uid, "🚫 *Trial Completed*\nAapka free trial khatam ho gaya hai.\nAccess permanent end ho gayi hai.");
+          bot.sendMessage(uid, "🚫 *Trial Completed*\nAccess permanent end ho gayi hai.");
         } else {
-          bot.sendMessage(uid, `✅ *New Result: ${tradeId}*\nResult: ${resInput}\nPoints: ${pts > 0 ? '+' : ''}${pts}\nTotal Score: ${u.points}`);
+          bot.sendMessage(uid, `✅ *Update: ${tradeId}*\nResult: ${resInput}\nPoints: ${pts > 0 ? '+' : ''}${pts}`);
         }
       }
     });
-    
     saveDB(db);
-    bot.sendMessage(msg.chat.id, `✅ Trade ${tradeId} added. Broadasted to all active users.`);
+    bot.sendMessage(msg.chat.id, `✅ Trade ${tradeId} added.`);
   });
 
-  // --- ADMIN: REJOIN ---
-  bot.onText(/\/rejoin (\d+)/, (msg, match) => {
-    if (!isAdmin(msg.from.id)) return;
-    const targetUid = match[1];
-    const db = loadDB();
-    if (!db.users[targetUid]) return bot.sendMessage(msg.chat.id, "User not found.");
-    
-    db.users[targetUid].status = 'active';
-    saveDB(db);
-    bot.sendMessage(msg.chat.id, `User ${targetUid} reactivated.`);
-    bot.sendMessage(targetUid, `⚡ *Re-Entry Granted*\nWelcome back! Admin has restored your access.`);
+  bot.on('polling_error', (err) => {
+    console.error('Polling Error:', err.message);
+    // Auto-restart polling handled by library defaults usually, but we log it.
   });
 
-  bot.on('polling_error', (err) => console.log('Polling Error:', err.message));
+  console.log("TradeFlow Bot Engine started successfully.");
 }
