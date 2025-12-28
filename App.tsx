@@ -5,14 +5,13 @@ import { NAVIGATION_ITEMS, DISCLAIMER } from './constants.tsx';
 import DashboardOverview from './components/DashboardOverview';
 import AdminTerminal from './components/AdminTerminal';
 import BotSimulator from './components/BotSimulator';
-import { Shield, ChevronRight, Menu, X, LogOut } from 'lucide-react';
+import { Shield, ChevronRight, Menu, X, LogOut, AlertTriangle } from 'lucide-react';
 
 const App: React.FC = () => {
   const { state, startTrial, addTradeResult, editTradeResult, deleteTradeResult, resetAll } = useBotStore();
   const [activeTab, setActiveTab] = useState('dashboard');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
-  // For simulation: we'll use the last user added or null
   const currentUser = state.users.length > 0 ? state.users[state.users.length - 1] : null;
 
   const renderContent = () => {
@@ -40,7 +39,7 @@ const App: React.FC = () => {
       case 'users':
         return (
           <div className="bg-slate-800 rounded-xl p-6 border border-slate-700">
-             <h2 className="text-xl font-bold mb-6">User Directory</h2>
+             <h2 className="text-xl font-bold mb-6 text-white">User Directory</h2>
              <div className="space-y-4">
                 {state.users.map(u => (
                     <div key={u.id} className="bg-slate-900/50 p-4 rounded-lg border border-slate-700 flex justify-between items-center">
@@ -52,7 +51,7 @@ const App: React.FC = () => {
                              <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase mb-2 block w-fit ml-auto ${u.status === 'active' ? 'bg-emerald-500/20 text-emerald-500' : 'bg-slate-500/20 text-slate-500'}`}>
                                 {u.status}
                              </span>
-                             <p className="text-sm font-bold">{u.points} Points / {u.tradesCount} Trades</p>
+                             <p className="text-sm font-bold text-slate-200">{u.points} Points / {u.tradesCount} Trades</p>
                         </div>
                     </div>
                 ))}
@@ -72,7 +71,6 @@ const App: React.FC = () => {
 
   return (
     <div className="flex h-screen overflow-hidden bg-slate-950">
-      {/* Mobile Sidebar Overlay */}
       {isSidebarOpen && (
         <div 
           className="fixed inset-0 bg-black/50 z-40 lg:hidden"
@@ -80,7 +78,6 @@ const App: React.FC = () => {
         />
       )}
 
-      {/* Sidebar */}
       <aside className={`
         fixed inset-y-0 left-0 z-50 w-64 bg-slate-900 border-r border-slate-800 transform transition-transform duration-300 ease-in-out lg:relative lg:translate-x-0
         ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}
@@ -91,7 +88,7 @@ const App: React.FC = () => {
               <Shield size={24} />
             </div>
             <div>
-              <h1 className="font-bold text-lg leading-tight">TradeFlow</h1>
+              <h1 className="font-bold text-lg leading-tight text-white">TradeFlow</h1>
               <p className="text-[10px] text-blue-400 font-bold uppercase tracking-widest">Bot Manager</p>
             </div>
           </div>
@@ -120,7 +117,16 @@ const App: React.FC = () => {
             ))}
           </nav>
 
-          <div className="p-4 border-t border-slate-800">
+          <div className="p-4 border-t border-slate-800 space-y-4">
+            <div className="bg-amber-500/10 border border-amber-500/20 p-3 rounded-lg">
+                <div className="flex items-center gap-2 text-amber-500 mb-1">
+                    <AlertTriangle size={14} />
+                    <span className="text-[10px] font-bold uppercase">Persistence Alert</span>
+                </div>
+                <p className="text-[10px] leading-tight text-slate-400">
+                    Render Free instances lose files on restart. For permanent data, use MongoDB Atlas.
+                </p>
+            </div>
             <div className="bg-slate-800/50 p-3 rounded-lg">
               <p className="text-[10px] text-slate-500 uppercase font-bold tracking-tight mb-1">Disclaimer</p>
               <p className="text-[10px] leading-relaxed text-slate-600 italic">{DISCLAIMER}</p>
@@ -129,9 +135,7 @@ const App: React.FC = () => {
         </div>
       </aside>
 
-      {/* Main Content */}
       <main className="flex-1 flex flex-col overflow-hidden">
-        {/* Header */}
         <header className="bg-slate-900 border-b border-slate-800 h-16 flex items-center justify-between px-6 sticky top-0 z-30">
           <div className="flex items-center gap-4">
             <button 
@@ -158,7 +162,6 @@ const App: React.FC = () => {
           </div>
         </header>
 
-        {/* Scrollable Area */}
         <div className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 bg-slate-950 relative">
           <div className="max-w-7xl mx-auto h-full">
             {renderContent()}

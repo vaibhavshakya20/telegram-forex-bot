@@ -1,20 +1,31 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
-</div>
 
-# Run and deploy your AI Studio app
+# TradeFlow Telegram Bot
 
-This contains everything you need to run your app locally.
+A private 1-on-1 Telegram bot for managing trade trials.
 
-View your app in AI Studio: https://ai.studio/apps/drive/1HV1anrW7jUwOP6k4TbN69LSdHDNeVnIE
-
-## Run Locally
-
-**Prerequisites:**  Node.js
-
+## Setup
 
 1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+   ```bash
+   npm install
+   ```
+
+2. Create a `.env` file in the root directory:
+   ```env
+   BOT_TOKEN=your_telegram_bot_token_here
+   ADMIN_ID=your_telegram_user_id_here
+   ```
+
+3. Run the bot:
+   ```bash
+   npm start
+   ```
+
+## Admin Commands
+- `/result TRADE_ID RESULT` - Post a new result (e.g., `/result T001 1:3`)
+- `/edit TRADE_ID NEW_RESULT` - Correct a mistake (e.g., `/edit T001 SL`)
+- `/delete TRADE_ID` - Remove a trade result completely
+
+## User Commands
+- `/start` - Join the trial
+- `/profile` - View your progress and history
