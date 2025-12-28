@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { Send, Edit3, Trash2, AlertCircle, RefreshCcw, Terminal, UserPlus } from 'lucide-react';
+import { Send, Edit3, Trash2, AlertCircle, RefreshCcw, Terminal, UserPlus, Image as ImageIcon } from 'lucide-react';
 import { TradeResult } from '../types';
 
 interface AdminTerminalProps {
@@ -14,7 +14,7 @@ interface AdminTerminalProps {
 
 const AdminTerminal: React.FC<AdminTerminalProps> = ({ onAdd, onEdit, onDelete, onReset, onRejoin, recentTrades }) => {
   const [command, setCommand] = useState('');
-  const [logs, setLogs] = useState<string[]>(['Admin session started...', 'Auto-ID enabled for /add [result]']);
+  const [logs, setLogs] = useState<string[]>(['Master terminal ready...', 'Workflow: Channel SS -> Bot /add']);
 
   const addLog = (msg: string) => setLogs(prev => [`[${new Date().toLocaleTimeString()}] ${msg}`, ...prev].slice(0, 50));
 
@@ -27,23 +27,18 @@ const AdminTerminal: React.FC<AdminTerminalProps> = ({ onAdd, onEdit, onDelete, 
       const res = parts[1];
       const tid = `T${recentTrades.length + 101}`;
       onAdd(tid, 'CHANNEL_SIGNAL', res);
-      addLog(`Added: ${tid} with ${res} pts.`);
+      addLog(`Success: ${tid} recorded with ${res} pts.`);
       setCommand('');
     } else if (cmd === '/rejoin' && parts.length === 2) {
       const uid = parts[1];
       if (onRejoin) onRejoin(uid);
-      addLog(`Reactivated user: ${uid}`);
+      addLog(`Action: Reactivated user ${uid}`);
       setCommand('');
-    } else if (cmd === '/profile') {
-      addLog(`Viewing full system summary...`);
-      setCommand('');
-    } else if (cmd === '/edit' && parts.length === 3) {
-      const [, id, res] = parts;
-      onEdit(id, res);
-      addLog(`Edited ${id} to ${res}`);
+    } else if (cmd === '/users' || cmd === '/profile') {
+      addLog(`Info: Check 'User Directory' tab for full list.`);
       setCommand('');
     } else {
-      addLog(`Error: Command logic not recognized.`);
+      addLog(`Error: Unknown command. Try /add 3`);
     }
   };
 
@@ -53,11 +48,32 @@ const AdminTerminal: React.FC<AdminTerminalProps> = ({ onAdd, onEdit, onDelete, 
         <div className="bg-slate-800 rounded-xl p-6 border border-slate-700 shadow-xl">
           <h2 className="text-xl font-bold mb-4 flex items-center gap-2 text-white">
             <Terminal className="text-blue-400" size={20} />
-            Admin Control Unit
+            Command & Control
           </h2>
+          
+          <div className="mb-6 bg-slate-900/50 p-4 rounded-lg border border-slate-700/50">
+            <h3 className="text-[10px] font-bold uppercase text-slate-500 mb-3 flex items-center gap-2">
+              <ImageIcon size={12} /> Daily Workflow Guide
+            </h3>
+            <ol className="text-xs space-y-2 text-slate-300">
+              <li className="flex gap-2">
+                <span className="text-blue-400 font-bold">1.</span> 
+                <span>Upload **Entry Chart** SS manually to Telegram Channel.</span>
+              </li>
+              <li className="flex gap-2">
+                <span className="text-blue-400 font-bold">2.</span> 
+                <span>Upload **Exit Chart** SS manually when trade completes.</span>
+              </li>
+              <li className="flex gap-2">
+                <span className="text-emerald-400 font-bold">3.</span> 
+                <span>Type `/add 2` here to update everyone's points.</span>
+              </li>
+            </ol>
+          </div>
+
           <form onSubmit={handleCommand} className="space-y-4">
             <div>
-              <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Input Command</label>
+              <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Execute Command</label>
               <div className="relative">
                 <input 
                   type="text" 
@@ -70,32 +86,23 @@ const AdminTerminal: React.FC<AdminTerminalProps> = ({ onAdd, onEdit, onDelete, 
                   <Terminal size={18} />
                 </div>
               </div>
-              <div className="mt-3 grid grid-cols-2 gap-2">
-                <div className="bg-slate-900/50 p-2 rounded border border-slate-800">
-                  <p className="text-[10px] text-slate-500 font-bold uppercase">Quick Points</p>
-                  <code className="text-xs text-blue-400">/add 5</code>
-                </div>
-                <div className="bg-slate-900/50 p-2 rounded border border-slate-800">
-                  <p className="text-[10px] text-slate-500 font-bold uppercase">Rejoin User</p>
-                  <code className="text-xs text-emerald-400">/rejoin [UID]</code>
-                </div>
-              </div>
             </div>
-            <button type="submit" className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-lg transition-all active:scale-[0.98]">
-              Execute Command
+            <button type="submit" className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-lg transition-all active:scale-[0.98] shadow-lg shadow-blue-900/40">
+              Update All Users
             </button>
           </form>
         </div>
 
-        <div className="bg-slate-800 rounded-xl p-6 border border-slate-700 flex-1 flex flex-col min-h-[300px]">
+        <div className="bg-slate-800 rounded-xl p-6 border border-slate-700 flex-1 flex flex-col min-h-[250px]">
           <h2 className="text-xl font-bold mb-4 flex items-center gap-2 text-white">
             <RefreshCcw className="text-emerald-400" size={20} />
-            System Output
+            Output Logs
           </h2>
-          <div className="flex-1 overflow-y-auto bg-slate-950 rounded-lg p-4 font-mono text-xs space-y-1.5 border border-slate-900">
+          <div className="flex-1 overflow-y-auto bg-slate-950 rounded-lg p-4 font-mono text-xs space-y-1.5 border border-slate-900 shadow-inner">
             {logs.map((log, i) => (
-              <div key={i} className="text-emerald-400 opacity-90">
-                <span className="text-slate-600 mr-2">{'>'}</span>{log}
+              <div key={i} className="text-emerald-400/90 flex gap-2">
+                <span className="text-slate-700 font-bold">{'>'}</span>
+                <span>{log}</span>
               </div>
             ))}
           </div>
@@ -105,34 +112,44 @@ const AdminTerminal: React.FC<AdminTerminalProps> = ({ onAdd, onEdit, onDelete, 
       <div className="bg-slate-800 rounded-xl p-6 border border-slate-700 flex flex-col h-full shadow-xl">
         <h2 className="text-xl font-bold mb-4 flex items-center gap-2 text-white">
           <AlertCircle className="text-blue-400" size={20} />
-          Global Results
+          Bot Result History
         </h2>
-        <div className="flex-1 overflow-y-auto pr-2">
+        <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar">
           <table className="w-full text-left text-sm border-separate border-spacing-y-2">
             <thead>
               <tr className="text-slate-500 text-[10px] uppercase font-bold tracking-wider">
-                <th className="pb-2 px-3">Trade ID</th>
-                <th className="pb-2 px-3">Pts</th>
-                <th className="pb-2 px-3 text-right">Action</th>
+                <th className="pb-2 px-3">ID</th>
+                <th className="pb-2 px-3">Result</th>
+                <th className="pb-2 px-3 text-right">Delete</th>
               </tr>
             </thead>
             <tbody>
               {recentTrades.slice().reverse().map((trade) => (
-                <tr key={trade.tradeId} className="bg-slate-900/50 group">
+                <tr key={trade.tradeId} className="bg-slate-900/50 group hover:bg-slate-900 transition-all">
                   <td className="py-3 px-3 rounded-l-lg font-mono text-blue-400">{trade.tradeId}</td>
-                  <td className="py-3 px-3 font-mono text-slate-300">{trade.points > 0 ? `+${trade.points}` : trade.points}</td>
+                  <td className="py-3 px-3">
+                    <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${trade.points > 0 ? 'bg-emerald-500/10 text-emerald-500' : 'bg-rose-500/10 text-rose-500'}`}>
+                      {trade.points > 0 ? `+${trade.points} RR` : 'SL HIT'}
+                    </span>
+                  </td>
                   <td className="py-3 px-3 rounded-r-lg text-right">
-                    <button onClick={() => onDelete(trade.tradeId)} className="p-1.5 text-slate-600 hover:text-rose-500">
+                    <button onClick={() => onDelete(trade.tradeId)} className="p-1.5 text-slate-600 hover:text-rose-500 transition-colors">
                       <Trash2 size={16} />
                     </button>
                   </td>
                 </tr>
               ))}
+              {recentTrades.length === 0 && (
+                <tr>
+                  <td colSpan={3} className="text-center py-20 text-slate-600 italic">No trades recorded in bot history.</td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>
-        <div className="mt-6 pt-4 border-t border-slate-700">
-           <p className="text-[10px] text-slate-500 font-bold uppercase">Admin Privileges: FULL_ACCESS</p>
+        <div className="mt-6 pt-4 border-t border-slate-700 flex justify-between items-center">
+           <p className="text-[10px] text-slate-500 font-bold uppercase">Master Access: Enabled</p>
+           <button onClick={onReset} className="text-rose-500 text-[10px] font-bold uppercase hover:underline opacity-50 hover:opacity-100 transition-opacity">Full System Wipe</button>
         </div>
       </div>
     </div>

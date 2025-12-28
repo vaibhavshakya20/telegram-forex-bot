@@ -52,11 +52,22 @@ if (TOKEN) {
     const db = loadDB();
     
     if (isAdmin(uid)) {
-      return bot.sendMessage(msg.chat.id, "Welcome Admin! ⚡\nAapka control panel active hai.\nCommands:\n/add [result]\n/rejoin [uid]\n/profile\n/users");
+      return bot.sendMessage(msg.chat.id, 
+        "⚡ Welcome Admin Master!\n\n" +
+        "Workflow:\n" +
+        "1. Entry/Exit Screenshots: Channel mein manually upload karein.\n" +
+        "2. Result Update: Bot mein /add [result] use karein.\n\n" +
+        "Admin Commands:\n" +
+        "• /add 3 (Profit 1:3)\n" +
+        "• /add sl (Loss)\n" +
+        "• /rejoin [UID] (Exited user ko wapas active karein)\n" +
+        "• /profile (System Summary & User List)\n" +
+        "• /users (Detailed User Table)"
+      );
     }
 
     if (db.users[uid]) {
-      return bot.sendMessage(msg.chat.id, "Welcome back!\nAapka trial pehle se chal raha hai ya khatam ho chuka hai.");
+      return bot.sendMessage(msg.chat.id, "Welcome back!\nAapka trial data safe hai. /profile se check karein.");
     }
 
     db.users[uid] = {
@@ -82,7 +93,7 @@ if (TOKEN) {
       const active = users.filter(u => u.status === 'active').length;
       let list = `🛠 ADMIN DASHBOARD\n\nTotal Users: ${users.length}\nActive: ${active}\n\nUser Directory:\n`;
       users.forEach(u => {
-        list += `• ${u.user_id} | P:${u.points} | T:${u.trades} | ${u.status.toUpperCase()}\n`;
+        list += `• ID: ${u.user_id} | ${u.status === 'active' ? '🟢' : '🔴'} | P:${u.points} | T:${u.trades}\n`;
       });
       return bot.sendMessage(msg.chat.id, list.slice(0, 4000));
     }
@@ -90,7 +101,19 @@ if (TOKEN) {
     const u = db.users[uid];
     if (!u) return bot.sendMessage(msg.chat.id, "Pehle /start bhein.");
     const hist = u.history.map((h, i) => `${i+1}) ${h.tradeId} | ${h.points > 0 ? '+' : ''}${h.points} Pts`).join('\n') || "No trades yet.";
-    bot.sendMessage(msg.chat.id, `📊 Your Profile\n\nJoined: ${new Date(u.join_timestamp).toLocaleDateString()}\nTrades: ${u.trades}\nPoints: ${u.points}\nStatus: ${u.status.toUpperCase()}\n\nHistory:\n${hist}`);
+    bot.sendMessage(msg.chat.id, `📊 Your Profile\n\nJoined: ${new Date(u.join_timestamp).toLocaleDateString()}\nTrades: ${u.trades} / 10\nPoints: ${u.points} / 10\nStatus: ${u.status.toUpperCase()}\n\nHistory:\n${hist}`);
+  });
+
+  // --- USERS LIST (Admin Only) ---
+  bot.onText(/\/users/, (msg) => {
+    if (!isAdmin(msg.from.id)) return;
+    const db = loadDB();
+    const users = Object.values(db.users);
+    let list = `👥 User List (${users.length})\n\n`;
+    users.forEach(u => {
+      list += `UID: ${u.user_id} | Status: ${u.status} | Pts: ${u.points}\n`;
+    });
+    bot.sendMessage(msg.chat.id, list.slice(0, 4000));
   });
 
   // --- ADMIN: ADD (Auto ID) ---
@@ -112,16 +135,15 @@ if (TOKEN) {
         
         if (u.trades >= 10 && u.points >= 10) {
           u.status = 'exited';
-          // Notification only to user
           bot.sendMessage(uid, "🚫 Free trial completed.\nYour access has ended permanently.");
         } else {
-          bot.sendMessage(uid, `✅ New Trade Update: ${tradeId}\nResult: ${resInput}\nTotal Points: ${u.points}`);
+          bot.sendMessage(uid, `✅ Trade Result: ${tradeId}\nResult: ${resInput}\nPoints: ${pts > 0 ? '+' : ''}${pts}\nTotal Points: ${u.points}`);
         }
       }
     });
     
     saveDB(db);
-    bot.sendMessage(msg.chat.id, `Success: ${tradeId} added (${pts} pts). All active users updated.`);
+    bot.sendMessage(msg.chat.id, `✅ Success! Trade ${tradeId} added.\nResult: ${resInput} (${pts} pts).\nActive users have been updated.`);
   });
 
   // --- ADMIN: REJOIN ---
@@ -135,8 +157,8 @@ if (TOKEN) {
     db.users[targetUid].status = 'active';
     saveDB(db);
     
-    bot.sendMessage(msg.chat.id, `User ${targetUid} has been reactivated.`);
-    bot.sendMessage(targetUid, `⚡ Your trial has been reactivated by Admin.\nWelcome back!`);
+    bot.sendMessage(msg.chat.id, `User ${targetUid} has been reactivated successfully.`);
+    bot.sendMessage(targetUid, `⚡ Your trial has been reactivated by Admin.\nWelcome back to the system!`);
   });
 
   bot.on('polling_error', console.log);
