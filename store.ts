@@ -21,11 +21,10 @@ export const useBotStore = () => {
   }, [state]);
 
   const calculatePoints = (result: string): number => {
-    if (result.toUpperCase() === 'SL') return -1;
-    // Extract RR value from string like "1:2"
-    const match = result.match(/1:(\d+)/);
-    if (match) return parseInt(match[1], 10);
-    return 0;
+    const val = result.toLowerCase();
+    if (val === 'sl') return -1;
+    const num = parseInt(val, 10);
+    return isNaN(num) ? 0 : num;
   };
 
   const startTrial = useCallback((userId: string, username: string) => {
@@ -58,13 +57,13 @@ export const useBotStore = () => {
       const updatedUsers = prev.users.map(user => {
         if (user.status === UserStatus.EXITED) return user;
         
-        // Rules specify: trade added if active. 
-        // Note: Logic says user sees trades where trade_timestamp >= user.join_timestamp
-        // So we only update users whose join time is before this trade
         if (newTrade.timestamp >= user.joinTimestamp) {
           const newTradesCount = user.tradesCount + 1;
           const newPoints = user.points + points;
-          const newStatus = (newTradesCount >= 10 && newPoints >= 10) ? UserStatus.EXITED : UserStatus.ACTIVE;
+          
+          // Completion logic: AND condition
+          const shouldExit = newTradesCount >= 10 && newPoints >= 10;
+          const newStatus = shouldExit ? UserStatus.EXITED : UserStatus.ACTIVE;
           
           return {
             ...user,
@@ -93,7 +92,6 @@ export const useBotStore = () => {
         ...prev,
         trades: prev.trades.map(t => t.tradeId === tradeId ? { ...t, result: newResult, points: newPointsValue } : t),
         users: prev.users.map(user => {
-          // If user already exited, do not reactivate
           const tradeToEdit = user.history.find(h => h.tradeId === tradeId);
           if (!tradeToEdit) return user;
 
@@ -101,9 +99,7 @@ export const useBotStore = () => {
           const pointDiff = newPointsValue - oldPoints;
           const updatedPoints = user.points + pointDiff;
 
-          // Re-calculate status (though rule says don't reactivate if already exited)
           let finalStatus = user.status;
-          // If they are active and now meet exit criteria, exit them
           if (user.status === UserStatus.ACTIVE && user.tradesCount >= 10 && updatedPoints >= 10) {
             finalStatus = UserStatus.EXITED;
           }
@@ -140,7 +136,7 @@ export const useBotStore = () => {
   }, []);
 
   const resetAll = useCallback(() => {
-    const confirmed = window.confirm("Are you sure you want to wipe all data? This cannot be undone.");
+    const confirmed = window.confirm("Are you sure you want to wipe all data?");
     if (confirmed) {
       setState({
         users: [],

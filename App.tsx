@@ -33,7 +33,6 @@ const App: React.FC = () => {
           <BotSimulator 
             currentUser={currentUser} 
             onStart={startTrial} 
-            onSendProfile={() => {}} 
           />
         );
       case 'users':

@@ -8,14 +8,12 @@ import http from 'http';
 
 dotenv.config();
 
-// --- RENDER HEALTH CHECK SERVER ---
+// Health check for hosting
 const PORT = process.env.PORT || 3000;
 http.createServer((req, res) => {
   res.writeHead(200, { 'Content-Type': 'text/plain' });
-  res.end('TradeFlow Bot is running...\n');
-}).listen(PORT, () => {
-  console.log(`Health check server listening on port ${PORT}`);
-});
+  res.end('TradeFlow Hybrid System is Active\n');
+}).listen(PORT);
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -28,189 +26,132 @@ const loadDB = () => {
   try {
     if (!fs.existsSync(DB_PATH)) return { users: {}, trades: [] };
     const data = fs.readFileSync(DB_PATH, 'utf8');
-    if (!data || data.trim() === "") return { users: {}, trades: [] };
-    return JSON.parse(data);
+    return data ? JSON.parse(data) : { users: {}, trades: [] };
   } catch (e) {
-    console.error("Load DB Error:", e.message);
     return { users: {}, trades: [] };
   }
 };
 
 const saveDB = (data) => {
-  try {
-    fs.writeFileSync(DB_PATH, JSON.stringify(data, null, 2));
-  } catch (e) {
-    console.error("Database save failed:", e.message);
-  }
+  fs.writeFileSync(DB_PATH, JSON.stringify(data, null, 2));
 };
 
-const calculatePoints = (result) => {
-  if (!result) return 0;
-  const upper = result.toUpperCase();
-  if (upper === 'SL') return -1;
-  const match = result.match(/1:(\d+)/);
-  if (match) return parseInt(match[1], 10);
-  return 0;
+const parseResult = (input) => {
+  const val = input.toLowerCase();
+  if (val === 'sl') return -1;
+  const num = parseInt(val, 10);
+  return isNaN(num) ? 0 : num;
 };
 
 if (TOKEN) {
   const bot = new TelegramBot(TOKEN, { polling: true });
-  console.log('TradeFlow Bot is active and polling...');
+  const isAdmin = (id) => id.toString() === ADMIN_ID;
 
-  const isAdmin = (msg) => msg.from.id.toString() === ADMIN_ID;
-
-  // Error handling for polling
-  bot.on('polling_error', (error) => {
-    console.error(`[Polling Error]: ${error.code} - ${error.message}`);
-  });
-
-  // USER COMMAND: /start
+  // --- USER: START ---
   bot.onText(/\/start/, (msg) => {
-    try {
-      const userId = msg.from.id.toString();
-      const db = loadDB();
-
-      if (db.users[userId]) {
-        bot.sendMessage(msg.chat.id, "Aapka trial pehle se active hai ya khatam ho chuka hai. Re-entry allow nahi hai.");
-        return;
-      }
-
-      db.users[userId] = {
-        user_id: userId,
-        username: msg.from.username || 'Trader',
-        join_timestamp: Date.now(),
-        trades: 0,
-        points: 0,
-        status: "active",
-        history: []
-      };
-
-      saveDB(db);
-      
-      bot.sendMessage(msg.chat.id, `Welcome 👋\nTrades yahin milenge.\nAapka free trial start ho chuka hai.\n\nRules:\n• SL = -1\n• RR jitna mile, utne points\n• 10 trades + 10 points = trial complete (one-time)\n\nStatus:\nTrades: 0 / 10\nPoints: 0 / 10`);
-    } catch (err) {
-      console.error("Start command error:", err);
+    const uid = msg.from.id.toString();
+    const db = loadDB();
+    if (db.users[uid]) {
+      return bot.sendMessage(msg.chat.id, "Welcome back!\nAapka trial pehle se chal raha hai.\nEk user sirf ek baar join kar sakta hai.");
     }
+    db.users[uid] = {
+      user_id: uid,
+      username: msg.from.username || 'Trader',
+      join_timestamp: Date.now(),
+      trades: 0,
+      points: 0,
+      status: "active",
+      history: []
+    };
+    saveDB(db);
+    bot.sendMessage(msg.chat.id, "Welcome 👋\nAapka free trial start ho chuka hai.\n\nRules:\n• SL = -1 Point\n• Target 1:N = N Points\n\nChannel mein entry/exit charts dekhte rahein. Aapka status yahan track hoga.");
   });
 
-  // USER COMMAND: /profile
+  // --- USER: PROFILE ---
   bot.onText(/\/profile/, (msg) => {
-    try {
-      const userId = msg.from.id.toString();
-      const db = loadDB();
-      const user = db.users[userId];
-
-      if (!user) return bot.sendMessage(msg.chat.id, "Please use /start to begin.");
-
-      const historyText = user.history.length > 0
-        ? user.history.map((h, i) => `${i + 1}) ${h.tradeId} | ${h.result} | ${h.points > 0 ? '+' : ''}${h.points}`).join('\n')
-        : "No trades yet.";
-
-      bot.sendMessage(msg.chat.id, `Your Trade Profile\n\nJoined: ${new Date(user.join_timestamp).toLocaleDateString()}\nTrades: ${user.trades} / 10\nPoints: ${user.points} / 10\n\nHistory:\n${historyText}\n\nStatus: ${user.status.toUpperCase()}`);
-    } catch (err) {
-      console.error("Profile command error:", err);
-    }
+    const uid = msg.from.id.toString();
+    const db = loadDB();
+    const u = db.users[uid];
+    if (!u) return bot.sendMessage(msg.chat.id, "Pehle /start bhein.");
+    
+    const hist = u.history.map((h, i) => `${i+1}) ${h.tradeId} | ${h.points > 0 ? '+' : ''}${h.points} Pts`).join('\n') || "No trades yet.";
+    
+    bot.sendMessage(msg.chat.id, `📊 Your Profile\n\nJoined: ${new Date(u.join_timestamp).toLocaleDateString()}\nTrades: ${u.trades}\nPoints: ${u.points}\nStatus: ${u.status.toUpperCase()}\n\nTrade History:\n${hist}`);
   });
 
-  // ADMIN COMMAND: /result TRADE_ID RESULT
-  bot.onText(/\/result (\S+) (\S+)/, (msg, match) => {
-    if (!isAdmin(msg)) return;
-    try {
-      const tradeId = match[1];
-      const resultStr = match[2];
-      const points = calculatePoints(resultStr);
-      const db = loadDB();
+  // --- ADMIN: ADD RESULT (/add 2 or /add sl) ---
+  bot.onText(/\/add (\S+)/, (msg, match) => {
+    if (!isAdmin(msg.from.id)) return;
+    const resInput = match[1];
+    const pts = parseResult(resInput);
+    const db = loadDB();
+    const tradeId = `T${db.trades.length + 101}`;
 
-      if (db.trades.find(t => t.tradeId === tradeId)) return bot.sendMessage(msg.chat.id, "Error: Trade ID already exists.");
-
-      db.trades.push({ tradeId, result: resultStr, points, timestamp: Date.now() });
-
-      Object.keys(db.users).forEach(uid => {
-        const user = db.users[uid];
-        if (user.status === 'active') {
-          user.trades += 1;
-          user.points += points;
-          user.history.push({ tradeId, result: resultStr, points });
-
-          if (user.trades >= 10 && user.points >= 10) {
-            user.status = 'exited';
-            bot.sendMessage(uid, "🚫 Free Trial Completed\nYour access has ended permanently.\nTo continue, please upgrade via Exness Social Trading.");
-          } else {
-            bot.sendMessage(uid, `✅ New Trade Result: ${tradeId}\nResult: ${resultStr}\nTotal Points: ${user.points}`);
-          }
+    db.trades.push({ tradeId, result: resInput, points: pts, time: Date.now() });
+    
+    Object.keys(db.users).forEach(uid => {
+      const u = db.users[uid];
+      if (u.status === 'active') {
+        u.trades += 1;
+        u.points += pts;
+        u.history.push({ tradeId, points: pts });
+        
+        // Completion Check: Trades >= 10 AND Points >= 10
+        if (u.trades >= 10 && u.points >= 10) {
+          u.status = 'exited';
+          bot.sendMessage(uid, "🚫 Free trial completed.\nYour access has ended permanently.");
+        } else {
+          bot.sendMessage(uid, `✅ New Update\nPoints: ${pts > 0 ? '+' : ''}${pts}\nTotal Points: ${u.points}\nTotal Trades: ${u.trades}`);
         }
-      });
-
-      saveDB(db);
-      bot.sendMessage(msg.chat.id, `Success: Trade ${tradeId} added.`);
-    } catch (err) {
-      console.error("Result command error:", err);
-    }
+      }
+    });
+    
+    saveDB(db);
+    bot.sendMessage(msg.chat.id, `Success: Trade ${tradeId} added (${pts} pts) to all active users.`);
   });
 
-  // ADMIN COMMAND: /edit TRADE_ID NEW_RESULT
+  // --- ADMIN: USERS LIST ---
+  bot.onText(/\/users/, (msg) => {
+    if (!isAdmin(msg.from.id)) return;
+    const db = loadDB();
+    const users = Object.values(db.users);
+    const active = users.filter(u => u.status === 'active').length;
+    const exited = users.filter(u => u.status === 'exited').length;
+
+    let list = `👥 User List\nTotal: ${users.length} | Active: ${active} | Exited: ${exited}\n\n`;
+    users.forEach(u => {
+      list += `${u.user_id} | ${new Date(u.join_timestamp).toLocaleDateString()} | T:${u.trades} | P:${u.points} | ${u.status}\n`;
+    });
+
+    bot.sendMessage(msg.chat.id, list.slice(0, 4000)); // Telegram limit safety
+  });
+
+  // --- ADMIN: EDIT ---
   bot.onText(/\/edit (\S+) (\S+)/, (msg, match) => {
-    if (!isAdmin(msg)) return;
-    try {
-      const tradeId = match[1];
-      const newResult = match[2];
-      const newPoints = calculatePoints(newResult);
-      const db = loadDB();
-
-      const tradeIndex = db.trades.findIndex(t => t.tradeId === tradeId);
-      if (tradeIndex === -1) return bot.sendMessage(msg.chat.id, "Error: Trade ID not found.");
-
-      const oldPoints = db.trades[tradeIndex].points;
-      db.trades[tradeIndex].result = newResult;
-      db.trades[tradeIndex].points = newPoints;
-
-      Object.keys(db.users).forEach(uid => {
-        const user = db.users[uid];
-        const historyIdx = user.history.findIndex(h => h.tradeId === tradeId);
-        if (historyIdx !== -1) {
-          user.points = user.points - oldPoints + newPoints;
-          user.history[historyIdx].result = newResult;
-          user.history[historyIdx].points = newPoints;
-          bot.sendMessage(uid, `⚠️ Correction: Trade ${tradeId} updated to ${newResult}.\nNew Total Points: ${user.points}`);
-        }
-      });
-
-      saveDB(db);
-      bot.sendMessage(msg.chat.id, `Success: Trade ${tradeId} updated.`);
-    } catch (err) {
-      console.error("Edit command error:", err);
-    }
+    if (!isAdmin(msg.from.id)) return;
+    const [_, tid, newRes] = match;
+    const db = loadDB();
+    const tIdx = db.trades.findIndex(t => t.tradeId === tid);
+    if (tIdx === -1) return bot.sendMessage(msg.chat.id, "Trade ID not found.");
+    
+    const oldPts = db.trades[tIdx].points;
+    const newPts = parseResult(newRes);
+    db.trades[tIdx].result = newRes;
+    db.trades[tIdx].points = newPts;
+    
+    Object.keys(db.users).forEach(uid => {
+      const u = db.users[uid];
+      const hIdx = u.history.findIndex(h => h.tradeId === tid);
+      if (hIdx !== -1) {
+        u.points = u.points - oldPts + newPts;
+        u.history[hIdx].points = newPts;
+        bot.sendMessage(uid, `⚠️ Admin correction for ${tid}.\nNew Points: ${u.points}`);
+      }
+    });
+    
+    saveDB(db);
+    bot.sendMessage(msg.chat.id, `Trade ${tid} updated.`);
   });
 
-  // ADMIN COMMAND: /delete TRADE_ID
-  bot.onText(/\/delete (\S+)/, (msg, match) => {
-    if (!isAdmin(msg)) return;
-    try {
-      const tradeId = match[1];
-      const db = loadDB();
-
-      const trade = db.trades.find(t => t.tradeId === tradeId);
-      if (!trade) return bot.sendMessage(msg.chat.id, "Error: Trade ID not found.");
-
-      db.trades = db.trades.filter(t => t.tradeId !== tradeId);
-
-      Object.keys(db.users).forEach(uid => {
-        const user = db.users[uid];
-        const hIdx = user.history.findIndex(h => h.tradeId === tradeId);
-        if (hIdx !== -1 && user.status === 'active') {
-          user.trades -= 1;
-          user.points -= user.history[hIdx].points;
-          user.history.splice(hIdx, 1);
-          bot.sendMessage(uid, `❌ Trade ${tradeId} has been deleted by admin.\nTotal Points: ${user.points}`);
-        }
-      });
-
-      saveDB(db);
-      bot.sendMessage(msg.chat.id, `Success: Trade ${tradeId} deleted.`);
-    } catch (err) {
-      console.error("Delete command error:", err);
-    }
-  });
-} else {
-  console.error("FATAL ERROR: BOT_TOKEN is missing in environment variables.");
+  bot.on('polling_error', console.log);
 }
