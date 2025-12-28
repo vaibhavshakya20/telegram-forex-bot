@@ -9,15 +9,35 @@ import http from 'http';
 dotenv.config();
 
 // --- STABILITY: Global Error Handlers ---
-process.on('uncaughtException', (err) => console.error('CRITICAL:', err));
-process.on('unhandledRejection', (reason) => console.error('REJECTION:', reason));
+process.on('uncaughtException', (err) => {
+  console.error('CRITICAL ERROR (Uncaught Exception):', err);
+});
 
-// --- KEEP ALIVE ---
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('CRITICAL ERROR (Unhandled Rejection):', reason);
+});
+
+// --- KEEP ALIVE: HTTP Server to prevent spin-down ---
 const PORT = process.env.PORT || 3000;
-http.createServer((req, res) => {
+const server = http.createServer((req, res) => {
   res.writeHead(200, { 'Content-Type': 'text/plain' });
-  res.end('TradeFlow Engine: Live\n');
-}).listen(PORT);
+  res.end('TradeFlow Engine: Online and Active\n');
+});
+
+server.listen(PORT, () => {
+  console.log(`Keep-alive server running on port ${PORT}`);
+});
+
+// Self-pinging logic if WEBAPP_URL is provided in .env
+if (process.env.WEBAPP_URL) {
+  setInterval(() => {
+    http.get(process.env.WEBAPP_URL, (res) => {
+      console.log(`Self-ping status: ${res.statusCode}`);
+    }).on('error', (err) => {
+      console.log('Self-ping error:', err.message);
+    });
+  }, 1000 * 60 * 10); // Ping every 10 minutes
+}
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -50,28 +70,38 @@ const saveDB = (data) => {
 };
 
 const parseResult = (input) => {
-  const val = input.toLowerCase().trim();
+  if (!input) return 0;
+  const val = input.toString().toLowerCase().trim();
   if (val === 'sl') return -1;
   const num = parseInt(val, 10);
   return isNaN(num) ? 0 : num;
 };
 
 if (TOKEN) {
-  const bot = new TelegramBot(TOKEN, { polling: true });
+  // Use polling with error handling
+  const bot = new TelegramBot(TOKEN, { 
+    polling: {
+      interval: 300,
+      autoStart: true,
+      params: { timeout: 10 }
+    }
+  });
+
   const isAdmin = (id) => id && id.toString() === ADMIN_ID?.toString();
 
   // --- SET COMMAND MENU ---
   const setBotCommands = () => {
     const adminCommands = [
-      { command: 'start', description: 'Open Admin Panel' },
-      { command: 'add', description: '[Result] Add trade result (e.g. /add 3)' },
-      { command: 'all', description: '[Msg] Send message to all active users' },
-      { command: 'users', description: 'List all users & message them' },
-      { command: 'rejoin', description: '[ID] Reactivate a finished user' },
-      { command: 'edit', description: '[ID] [Result] Correct a trade' },
-      { command: 'delete', description: '[ID] Delete a trade' }
+      { command: 'start', description: 'Main Menu / Status' },
+      { command: 'add', description: '[Res] Add trade result (e.g. /add 3)' },
+      { command: 'all', description: '[Msg] Broadcast text to everyone' },
+      { command: 'users', description: 'Manage Users & Message' },
+      { command: 'rejoin', description: '[ID] Reactivate finished user' },
+      { command: 'edit', description: '[ID] [NewRes] Correct trade' },
+      { command: 'delete', description: '[ID] Remove trade' },
+      { command: 'profile', description: 'Check my profile progress' }
     ];
-    bot.setMyCommands(adminCommands);
+    bot.setMyCommands(adminCommands).catch(e => console.error("Failed to set commands:", e));
   };
   setBotCommands();
 
@@ -86,10 +116,10 @@ if (TOKEN) {
     activeUsers.forEach(u => {
       bot.sendPhoto(u.user_id, photoId, { caption: caption }).catch(() => {});
     });
-    bot.sendMessage(msg.chat.id, `📸 Photo broadcasted to ${activeUsers.length} users.`);
+    bot.sendMessage(msg.chat.id, `📸 Broadcasted to ${activeUsers.length} users.`);
   });
 
-  // --- ADMIN: TEXT BROADCAST ---
+  // --- ADMIN: TEXT BROADCAST (/all) ---
   bot.onText(/\/all (.+)/, (msg, match) => {
     if (!isAdmin(msg.from.id)) return;
     const text = match[1];
@@ -99,22 +129,25 @@ if (TOKEN) {
     activeUsers.forEach(u => {
       bot.sendMessage(u.user_id, `📢 *Announcement:*\n\n${text}`, { parse_mode: 'Markdown' }).catch(() => {});
     });
-    bot.sendMessage(msg.chat.id, `📢 Message broadcasted to ${activeUsers.length} users.`);
+    bot.sendMessage(msg.chat.id, `📢 Sent to ${activeUsers.length} users.`);
   });
 
   // --- ADMIN: REJOIN USER ---
-  bot.onText(/\/rejoin (\d+)/, (msg, match) => {
-    if (!isAdmin(msg.from.id)) return;
-    const targetUid = match[1];
+  const processRejoin = (chatId, targetUid) => {
     const db = loadDB();
-    
-    if (!db.users[targetUid]) return bot.sendMessage(msg.chat.id, "❌ User ID nahi mila.");
+    if (!db.users[targetUid]) return bot.sendMessage(chatId, "❌ User ID not found in database.");
     
     db.users[targetUid].status = 'active';
+    // Optionally reset points if you want them to start over, 
+    // but usually rejoin means resuming access.
     saveDB(db);
     
-    bot.sendMessage(msg.chat.id, `✅ User \`${targetUid}\` reactivate ho gaya hai.`, { parse_mode: 'Markdown' });
-    bot.sendMessage(targetUid, "⚡ *Trial Reactivated*\nAdmin ne aapka access dobara chalu kar diya hai.");
+    bot.sendMessage(chatId, `✅ User \`${targetUid}\` has been reactivated.`, { parse_mode: 'Markdown' });
+    bot.sendMessage(targetUid, "⚡ *Access Restored*\nAdmin ne aapka access reactivate kar diya hai. Aap agle trades track kar sakte hain.");
+  };
+
+  bot.onText(/\/rejoin (\d+)/, (msg, match) => {
+    if (isAdmin(msg.from.id)) processRejoin(msg.chat.id, match[1]);
   });
 
   // --- ADMIN: DELETE TRADE ---
@@ -124,7 +157,7 @@ if (TOKEN) {
     const db = loadDB();
     
     const tradeIdx = db.trades.findIndex(t => t.tradeId === tradeId);
-    if (tradeIdx === -1) return bot.sendMessage(msg.chat.id, "❌ Trade ID nahi mila.");
+    if (tradeIdx === -1) return bot.sendMessage(msg.chat.id, "❌ Trade ID not found.");
     
     const trade = db.trades[tradeIdx];
     db.trades.splice(tradeIdx, 1);
@@ -132,14 +165,14 @@ if (TOKEN) {
     Object.values(db.users).forEach(u => {
       const hIdx = u.history.findIndex(h => h.tradeId === tradeId);
       if (hIdx !== -1) {
-        u.points -= u.history[hIdx].points;
-        u.trades -= 1;
+        u.points = (u.points || 0) - u.history[hIdx].points;
+        u.trades = Math.max(0, (u.trades || 0) - 1);
         u.history.splice(hIdx, 1);
       }
     });
     
     saveDB(db);
-    bot.sendMessage(msg.chat.id, `🗑️ Trade ${tradeId} deleted and points rolled back.`);
+    bot.sendMessage(msg.chat.id, `🗑️ Trade ${tradeId} deleted. Points updated for all users.`);
   });
 
   // --- ADMIN: EDIT TRADE ---
@@ -151,7 +184,7 @@ if (TOKEN) {
     const db = loadDB();
     
     const trade = db.trades.find(t => t.tradeId === tradeId);
-    if (!trade) return bot.sendMessage(msg.chat.id, "❌ Trade ID nahi mila.");
+    if (!trade) return bot.sendMessage(msg.chat.id, "❌ Trade ID not found.");
     
     const oldPts = trade.points;
     trade.result = newRes;
@@ -167,7 +200,7 @@ if (TOKEN) {
     });
     
     saveDB(db);
-    bot.sendMessage(msg.chat.id, `✏️ Trade ${tradeId} updated to ${newRes} (${newPts} pts).`);
+    bot.sendMessage(msg.chat.id, `✏️ Trade ${tradeId} edited. New result: ${newRes} (${newPts} pts).`);
   });
 
   // --- GLOBAL MESSAGE HANDLER ---
@@ -176,20 +209,20 @@ if (TOKEN) {
     const text = msg.text;
     if (!text || text.startsWith('/')) return;
 
+    // Private Admin-to-User Chat logic
     if (isAdmin(uid) && adminState.activeTargetId) {
-      if (text === 'cancel') {
+      if (text.toLowerCase() === 'cancel') {
         adminState.activeTargetId = null;
-        return bot.sendMessage(ADMIN_ID, "✅ Messaging mode off.");
+        return bot.sendMessage(ADMIN_ID, "✅ Direct messaging mode turned off.");
       }
       
       const target = adminState.activeTargetId;
       bot.sendMessage(target, `💬 *Message from Admin:*\n\n${text}`, { parse_mode: 'Markdown' })
         .then(() => {
-          bot.sendMessage(ADMIN_ID, `✅ Sent to \`${target}\`.`);
-          adminState.activeTargetId = null;
+          bot.sendMessage(ADMIN_ID, `✅ Message sent to \`${target}\`. Type more or 'cancel'.`, { parse_mode: 'Markdown' });
         })
         .catch(() => {
-          bot.sendMessage(ADMIN_ID, `❌ Failed. User blocked the bot.`);
+          bot.sendMessage(ADMIN_ID, `❌ Failed to send. User may have blocked the bot.`);
           adminState.activeTargetId = null;
         });
     }
@@ -201,7 +234,7 @@ if (TOKEN) {
     const db = loadDB();
     
     if (isAdmin(uid)) {
-      return bot.sendMessage(msg.chat.id, "⚡ *Admin Access Enabled*\n\nCommands list menu mein check karein ya `/` type karein.", { parse_mode: 'Markdown' });
+      return bot.sendMessage(msg.chat.id, "⚡ *TradeFlow Admin Master*\n\n✅ Commands active.\n✅ Broadcast active.\n✅ Polling stable.\n\nUse / menu for quick commands.", { parse_mode: 'Markdown' });
     }
 
     if (!db.users[uid]) {
@@ -215,9 +248,9 @@ if (TOKEN) {
         history: []
       };
       saveDB(db);
-      bot.sendMessage(msg.chat.id, "Welcome 👋\nAapka free trial start ho chuka hai.\n\nRules:\n• SL = -1 Point\n• Target 1:N = N Points\n\nStatus check karne ke liye /profile bhejien.");
+      bot.sendMessage(msg.chat.id, "Welcome 👋\nAapka free trial start ho chuka hai.\n\n*Rules:*\n• SL Hit = -1 Point\n• Target 1:RR = RR Points\n• Goal: 10 Trades & 10 Points\n\nResult updates yahi milenge.", { parse_mode: 'Markdown' });
     } else {
-      bot.sendMessage(msg.chat.id, "Welcome back! /profile se status dekhein.");
+      bot.sendMessage(msg.chat.id, "Welcome back! Type /profile to see your progress.");
     }
   });
 
@@ -241,14 +274,14 @@ if (TOKEN) {
 
         if (u.trades >= 10 && u.points >= 10) {
           u.status = 'exited';
-          bot.sendMessage(uid, "🚫 *Free Trial Completed*\nYour access has ended permanently.\nTo continue, please upgrade.");
+          bot.sendMessage(uid, "🚫 *Free Trial Completed*\nYour access has ended permanently. Points reached 10+.\n\nTo continue, join via Exness Social Trading.");
         } else {
-          bot.sendMessage(uid, `✅ *Update: ${tradeId}*\nResult: ${resInput}\nPoints: ${pts > 0 ? '+' : ''}${pts}\nTotal: ${u.points} / 10`);
+          bot.sendMessage(uid, `✅ *New Update: ${tradeId}*\nResult: ${resInput}\nPoints: ${pts > 0 ? '+' : ''}${pts}\nTotal Points: ${u.points}/10`, { parse_mode: 'Markdown' });
         }
       }
     });
     saveDB(db);
-    bot.sendMessage(msg.chat.id, `✅ Success: ${tradeId} added. Updates sent to ${updatedCount} users.`);
+    bot.sendMessage(msg.chat.id, `✅ Success: ${tradeId} (${resInput}) added for ${updatedCount} users.`);
   };
 
   bot.onText(/\/add (\S+)/, (msg, match) => {
@@ -264,10 +297,10 @@ if (TOKEN) {
     const uid = msg.from.id.toString();
     const db = loadDB();
     const u = db.users[uid];
-    if (!u) return bot.sendMessage(msg.chat.id, "Start with /start");
+    if (!u) return bot.sendMessage(msg.chat.id, "Please /start first.");
 
-    const hist = u.history.map((h, i) => `${i+1}) ${h.tradeId} | ${h.result} | ${h.points}`).join('\n') || "No trades yet.";
-    bot.sendMessage(msg.chat.id, `📊 *Your Trade Profile*\n\nTrades: ${u.trades} / 10\nPoints: ${u.points} / 10\nStatus: ${u.status.toUpperCase()}\n\n*History:*\n${hist}`, { parse_mode: 'Markdown' });
+    const hist = u.history.slice(-10).map((h, i) => `${i+1}) ${h.tradeId} | ${h.result} | ${h.points}`).join('\n') || "No trades yet.";
+    bot.sendMessage(msg.chat.id, `📊 *Trade Profile*\n\nTrades: ${u.trades} / 10\nPoints: ${u.points} / 10\nStatus: ${u.status.toUpperCase()}\n\n*Recent History:*\n${hist}`, { parse_mode: 'Markdown' });
   });
 
   // --- ADMIN: USERS DIRECTORY ---
@@ -275,14 +308,15 @@ if (TOKEN) {
     if (!isAdmin(msg.from.id)) return;
     const db = loadDB();
     const users = Object.values(db.users);
-    if (users.length === 0) return bot.sendMessage(msg.chat.id, "No users.");
+    if (users.length === 0) return bot.sendMessage(msg.chat.id, "No users found.");
 
+    bot.sendMessage(msg.chat.id, `👥 *Total Users:* ${users.length}`);
     users.forEach(u => {
-      bot.sendMessage(msg.chat.id, `👤 \`${u.user_id}\` (${u.username})\nPoints: ${u.points} | Trades: ${u.trades} | ${u.status}`, {
+      bot.sendMessage(msg.chat.id, `👤 \`${u.user_id}\` (${u.username})\nScore: ${u.points} Pts | ${u.trades} Trades\nStatus: ${u.status.toUpperCase()}`, {
         parse_mode: 'Markdown',
         reply_markup: {
           inline_keyboard: [
-            [{ text: "✉️ Message User", callback_data: `msg_${u.user_id}` }],
+            [{ text: "✉️ Message", callback_data: `msg_${u.user_id}` }],
             [{ text: "🔄 Reactivate", callback_data: `rejoin_${u.user_id}` }]
           ]
         }
@@ -294,22 +328,21 @@ if (TOKEN) {
   bot.on('callback_query', (query) => {
     if (!isAdmin(query.from.id)) return;
     const data = query.data;
-    const db = loadDB();
     
     if (data.startsWith('msg_')) {
       adminState.activeTargetId = data.split('_')[1];
-      bot.sendMessage(ADMIN_ID, `📝 Write message for \`${adminState.activeTargetId}\` (or type 'cancel'):`, { parse_mode: 'Markdown' });
+      bot.sendMessage(ADMIN_ID, `📝 Write message for \`${adminState.activeTargetId}\` (Type 'cancel' to exit):`, { parse_mode: 'Markdown' });
     } else if (data.startsWith('rejoin_')) {
       const tid = data.split('_')[1];
-      if (db.users[tid]) {
-        db.users[tid].status = 'active';
-        saveDB(db);
-        bot.sendMessage(ADMIN_ID, `✅ User ${tid} reactivated.`);
-        bot.sendMessage(tid, "⚡ Admin has restored your access.");
-      }
+      processRejoin(ADMIN_ID, tid);
     }
     bot.answerCallbackQuery(query.id);
   });
 
-  bot.on('polling_error', (err) => console.log('Polling:', err.message));
+  bot.on('polling_error', (err) => {
+    console.error('Polling Error:', err.message);
+    // Polling usually continues automatically, but logging is vital.
+  });
+
+  console.log("TradeFlow Bot Engine is now running...");
 }
