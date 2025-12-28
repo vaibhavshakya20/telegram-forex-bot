@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { Send, Edit3, Trash2, AlertCircle, RefreshCcw, Terminal, UserPlus, Image as ImageIcon } from 'lucide-react';
+import { Send, Edit3, Trash2, AlertCircle, RefreshCcw, Terminal, UserPlus, Image as ImageIcon, Megaphone } from 'lucide-react';
 import { TradeResult } from '../types';
 
 interface AdminTerminalProps {
@@ -23,22 +23,22 @@ const AdminTerminal: React.FC<AdminTerminalProps> = ({ onAdd, onEdit, onDelete, 
     const parts = command.trim().split(' ');
     const cmd = parts[0].toLowerCase();
 
-    if (cmd === '/add' && parts.length === 2) {
-      const res = parts[1];
+    if ((cmd === '/add' || cmd === '/result') && parts.length >= 2) {
+      const res = parts[parts.length - 1]; // Last part is usually the result
       const tid = `T${recentTrades.length + 101}`;
       onAdd(tid, 'CHANNEL_SIGNAL', res);
       addLog(`Success: ${tid} recorded with ${res} pts.`);
+      setCommand('');
+    } else if (cmd === '/all' && parts.length > 1) {
+      addLog(`Broadcast: Sending text to all active users...`);
       setCommand('');
     } else if (cmd === '/rejoin' && parts.length === 2) {
       const uid = parts[1];
       if (onRejoin) onRejoin(uid);
       addLog(`Action: Reactivated user ${uid}`);
       setCommand('');
-    } else if (cmd === '/users' || cmd === '/profile') {
-      addLog(`Info: Check 'User Directory' tab for full list.`);
-      setCommand('');
     } else {
-      addLog(`Error: Unknown command. Try /add 3`);
+      addLog(`Error: Try /add 3 or /all Hello Team`);
     }
   };
 
@@ -53,22 +53,22 @@ const AdminTerminal: React.FC<AdminTerminalProps> = ({ onAdd, onEdit, onDelete, 
           
           <div className="mb-6 bg-slate-900/50 p-4 rounded-lg border border-slate-700/50">
             <h3 className="text-[10px] font-bold uppercase text-slate-500 mb-3 flex items-center gap-2">
-              <ImageIcon size={12} /> Daily Workflow Guide
+              <Megaphone size={12} /> Admin Guide
             </h3>
-            <ol className="text-xs space-y-2 text-slate-300">
+            <ul className="text-xs space-y-2 text-slate-300">
               <li className="flex gap-2">
-                <span className="text-blue-400 font-bold">1.</span> 
-                <span>Upload **Entry Chart** SS manually to Telegram Channel.</span>
+                <span className="text-blue-400 font-bold">•</span> 
+                <span>`/add 3` : Update result for all users.</span>
               </li>
               <li className="flex gap-2">
-                <span className="text-blue-400 font-bold">2.</span> 
-                <span>Upload **Exit Chart** SS manually when trade completes.</span>
+                <span className="text-blue-400 font-bold">•</span> 
+                <span>`/all Message` : Send text to all active users.</span>
               </li>
               <li className="flex gap-2">
-                <span className="text-emerald-400 font-bold">3.</span> 
-                <span>Type `/add 2` here to update everyone's points.</span>
+                <span className="text-blue-400 font-bold">•</span> 
+                <span>**Send Photo** : Directly broadcast any screenshot.</span>
               </li>
-            </ol>
+            </ul>
           </div>
 
           <form onSubmit={handleCommand} className="space-y-4">
@@ -88,7 +88,7 @@ const AdminTerminal: React.FC<AdminTerminalProps> = ({ onAdd, onEdit, onDelete, 
               </div>
             </div>
             <button type="submit" className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-lg transition-all active:scale-[0.98] shadow-lg shadow-blue-900/40">
-              Update All Users
+              Execute Command
             </button>
           </form>
         </div>
@@ -141,7 +141,7 @@ const AdminTerminal: React.FC<AdminTerminalProps> = ({ onAdd, onEdit, onDelete, 
               ))}
               {recentTrades.length === 0 && (
                 <tr>
-                  <td colSpan={3} className="text-center py-20 text-slate-600 italic">No trades recorded in bot history.</td>
+                  <td colSpan={3} className="text-center py-20 text-slate-600 italic">No trades recorded.</td>
                 </tr>
               )}
             </tbody>
